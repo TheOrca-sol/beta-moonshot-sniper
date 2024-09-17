@@ -1,37 +1,43 @@
 // src/App.js
-import React, { useContext } from 'react';
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-import { AuthProvider, AuthContext } from './AuthContext';
-import MainApp from './MainApp'; // Your existing App.js content moved to MainApp.js
-import Login from './Login'; // New Login component
 
-const PrivateRoute = ({ children }) => {
-  const { user, loading } = useContext(AuthContext);
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  return user ? children : <Navigate to="/login" />;
-};
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import MainApp from './MainApp'; // Your sniper component
+import Login from './Login';
+import AuthCallback from './AuthCallback';
+import ProtectedRoute from './ProtectedRoute';
+import { AuthContext } from './AuthContext';
 
 function App() {
+  const [auth, setAuth] = useState(false);
+  const [token, setToken] = useState(null);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    if (storedToken) {
+      setAuth(true);
+      setToken(storedToken);
+    }
+  }, []);
+
   return (
-    <AuthProvider>
+    <AuthContext.Provider value={{ auth, setAuth, token, setToken }}>
       <Router>
         <Routes>
-          <Route path="/login" element={<Login />} />
           <Route
             path="/"
             element={
-              <PrivateRoute>
+              <ProtectedRoute>
                 <MainApp />
-              </PrivateRoute>
+              </ProtectedRoute>
             }
           />
+          <Route path="/login" element={<Login />} />
+          <Route path="/auth" element={<AuthCallback />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>
-    </AuthProvider>
+    </AuthContext.Provider>
   );
 }
 
