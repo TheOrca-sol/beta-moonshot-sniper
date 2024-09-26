@@ -282,12 +282,10 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
               {!isLoadingTwitter && twitterAnalytics && (
                 <>
                   <Typography variant="h6" style={{ marginTop: '20px' }}>Twitter Analytics</Typography>
-                  <Typography>Followers: {twitterAnalytics.followerCount}</Typography>
-                  <Typography>Following: {twitterAnalytics.followingCount}</Typography>
-                  <Typography>Tweet Count: {twitterAnalytics.tweetCount}</Typography>
-                  <Typography>Average Engagement: {twitterAnalytics.averageEngagement.toFixed(2)}</Typography>
-                  <Typography>Account Age (days): {twitterAnalytics.accountAge}</Typography>
-                  <Typography>Summary: {twitterAnalytics.evaluationSummary}</Typography>
+                  <Typography>Followers: {twitterAnalytics.followerCount || 'N/A'}</Typography>
+                  <Typography>Following: {twitterAnalytics.followingCount || 'N/A'}</Typography>
+                  <Typography>Tweet Count: {twitterAnalytics.tweetCount || 'N/A'}</Typography>
+                  <Typography>Account Age (days): {twitterAnalytics.accountAge || 'N/A'}</Typography>
                 </>
               )}
               
