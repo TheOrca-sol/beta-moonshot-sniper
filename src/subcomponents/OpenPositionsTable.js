@@ -285,7 +285,7 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
                   <Typography>Followers: {twitterAnalytics.followerCount || 'N/A'}</Typography>
                   <Typography>Following: {twitterAnalytics.followingCount || 'N/A'}</Typography>
                   <Typography>Tweet Count: {twitterAnalytics.tweetCount || 'N/A'}</Typography>
-                  <Typography>Account Age (days): {twitterAnalytics.accountAge || 'N/A'}</Typography>
+                  <Typography>Account Age (days): {twitterAnalytics.accountAge ? twitterAnalytics.accountAge.toFixed(2) : 'N/A'}</Typography>
                 </>
               )}
               
