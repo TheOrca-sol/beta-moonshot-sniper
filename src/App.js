@@ -7,6 +7,7 @@ import Login from './Login';
 import AuthCallback from './AuthCallback';
 import ProtectedRoute from './ProtectedRoute';
 import { AuthContext } from './AuthContext';
+import TokenListComponent from './TokenListComponent';
 
 function App() {
   const [auth, setAuth] = useState(false);
@@ -33,6 +34,9 @@ function App() {
             }
           />
           <Route path="/login" element={<Login />} />
+          <Route path="/tokenanlysis" element={<TokenListComponent />} />
+          
+
           <Route path="/auth" element={<AuthCallback />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

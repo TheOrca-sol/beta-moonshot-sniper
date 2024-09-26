@@ -51,7 +51,6 @@ import { InsertChart as InsertChartIcon } from '@mui/icons-material';
 import axios from 'axios';
 
 
-
 window.Buffer = Buffer;
 window.process = process;
 
@@ -78,7 +77,7 @@ function App() {
   const openPositionsRef = useRef([]);
   const [solPrice, setSolPrice] = useState(null); // SOL price in USD
   const [error, setError] = useState(null); // Error state for user feedback
-  const [collateralAmountSol, setCollateralAmountSol] = useState(0.01); // Default value
+  const [collateralAmountSol, setCollateralAmountSol] = useState(0.1); // Default value
   const [slippageBps, setSlippageBps] = useState(1500); // Default slippage in basis points
   const pendingTransactions = useRef([]);
   // State for Private Key and RPC URL
@@ -87,13 +86,25 @@ function App() {
 
   // State for Connection and Keypair
   const [keypair, setKeypair] = useState(null);
-  const [maxPriceChange, setMaxPriceChange] = useState(10);
+  const [maxPriceChange, setMaxPriceChange] = useState(15);
   const [minPriceChange, setMinPriceChange] = useState('');
   const [requireTwitter, setRequireTwitter] = useState(false);
   const [nameFilter, setNameFilter] = useState(''); // New state for name filter
   const [hasRole, setHasRole] = useState(false); // Determines if user has the required role
   const [authLoading, setAuthLoading] = useState(true); // New loading state for user verification
   const [authError, setAuthError] = useState(null); // New error state for user verification
+  const [maxRetries, setMaxRetries] = useState(3); // Default to 0 retries
+  const [stopLoss, setStopLoss] = useState(10); // Default stop loss set to 10%
+  const [takeProfitPercentage, setTakeProfitPercentage] = useState(100); // Default to 0 or any valid value
+  const [requireTelegram, setRequireTelegram] = useState(false); // New state for Telegram filter
+  const [trailingStopLoss, setTrailingStopLoss] = useState(0);
+  const [inactivityThreshold, setInactivityThreshold] = useState(10);
+  const [minVolume, setMinVolume] = useState(0); // Add volume state
+
+
+
+
+
 
 
 
@@ -166,30 +177,30 @@ function App() {
   const TOTAL_SUPPLY = 1000000000; // 1,000,000,000 tokens
   const CREATION_TIME_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 
-  // Function to fetch prices using DexScreener API
+
   const fetchTokenPricesFromDexScreener = async (tokenAddresses) => {
     try {
       const chunkSize = 30; // DexScreener allows up to 30 token addresses per request
       const chunks = [];
-
+  
       for (let i = 0; i < tokenAddresses.length; i += chunkSize) {
         chunks.push(tokenAddresses.slice(i, i + chunkSize));
       }
-
+  
       const priceData = {};
-
+  
       const fetchPromises = chunks.map(async (chunk) => {
         const addresses = chunk.join(",");
         const response = await fetch(
           `https://api.dexscreener.com/latest/dex/tokens/${addresses}`
         );
-
+  
         if (!response.ok) {
           throw new Error(`DexScreener API error! Status: ${response.status}`);
         }
-
+  
         const data = await response.json();
-
+  
         if (data && data.pairs) {
           data.pairs.forEach((pair) => {
             if (pair.priceUsd) {
@@ -200,9 +211,9 @@ function App() {
           });
         }
       });
-
+  
       await Promise.all(fetchPromises);
-
+  
       return priceData;
     } catch (error) {
       console.error("Error fetching token prices from DexScreener:", error);
@@ -210,6 +221,8 @@ function App() {
       return {};
     }
   };
+  
+
 
   // Initialize Moonshot and Connection
   
@@ -246,7 +259,7 @@ function App() {
   useEffect(() => {
     if (autoBuyEnabled && connection && moonshot) {
       // Start interval
-      intervalIdRef.current = setInterval(fetchAndDisplayTokens, 15000); // Fetch every 15 seconds to reduce rate limits
+      intervalIdRef.current = setInterval(fetchAndDisplayTokens, 5000); // Fetch every 15 seconds to reduce rate limits
     } else {
       // Stop interval
       if (intervalIdRef.current) {
@@ -275,18 +288,40 @@ function App() {
         const tokenAddresses = positions.map((position) => position.address);
 
         // Fetch current prices from DexScreener
-        const prices = await fetchTokenPricesFromDexScreener(tokenAddresses);
+        const pricesFromDexScreener = await fetchTokenPricesFromDexScreener(tokenAddresses);
+
 
         const updatedPositions = positions.map((position) => {
-          const currentPrice = prices[position.address] || position.currentPrice; // Fallback to existing price
+        const currentPrice = pricesFromDexScreener[position.address] || position.currentPrice || 0; // Fallback to existing price
           const roi =
             position.purchasePrice > 0
               ? ((currentPrice - position.purchasePrice) / position.purchasePrice) * 100
               : 0;
+            // Track highest price for trailing stop loss
+            const highestPrice = position.highestPrice
+            ? Math.max(position.highestPrice, currentPrice)
+            : currentPrice;
+
+            const trailingStopPrice = highestPrice * (1 - trailingStopLoss / 100);
+
+            // Check if price drops below trailing stop price
+            const shouldSellDueToTrailingStop = currentPrice <= trailingStopPrice;
+
+            // Check if the price has dropped below the stop loss percentage
+            const shouldSellDueToStopLoss = roi <= -stopLoss;
+
+            // Check if the price has reached or exceeded the take profit percentage
+            const shouldSellDueToTakeProfit = takeProfitPercentage && roi >= takeProfitPercentage;
+
+            // Trigger a sell if any of the conditions are met
+            if (shouldSellDueToTrailingStop || shouldSellDueToStopLoss || shouldSellDueToTakeProfit) {
+              sellToken(position);
+            }
 
           return {
             ...position,
             currentPrice,
+            highestPrice,
             roi,
           };
         });
@@ -300,10 +335,11 @@ function App() {
       }
     };
 
-    const interval = setInterval(updatePositions, 10000); // Update every 10 seconds
+    const interval = setInterval(updatePositions, 2000); // Update every 10 seconds
 
     return () => clearInterval(interval);
-  }, []); // Removed [tokens] dependency to allow continuous updates
+
+  }, [stopLoss,takeProfitPercentage, trailingStopLoss]); // Removed [tokens] dependency to allow continuous updates
 
   // Function to fetch and display tokens
   async function fetchAndDisplayTokens() {
@@ -320,12 +356,12 @@ function App() {
       const tokenAddresses = data.map((token) => token.baseToken.address);
 
       // Fetch prices from DexScreener
-      const prices = await fetchTokenPricesFromDexScreener(tokenAddresses);
+      const pricesFromDexScreener = await fetchTokenPricesFromDexScreener(tokenAddresses);
 
       // Update token data with fetched prices
       const updatedTokens = data.map((token) => ({
         ...token,
-        currentPriceUsd: prices[token.baseToken.address] || parseFloat(token.priceUsd) || 0,
+        currentPriceUsd: pricesFromDexScreener[token.baseToken.address] || parseFloat(token.priceUsd) || 0, // Use DexScreener price or fallback to Moonshot's price
       }));
 
       setTokens(updatedTokens);
@@ -354,8 +390,15 @@ function App() {
     const hasTwitter = token.profile?.links?.some((link) =>
       link.includes('twitter.com') || link.includes('x.com')
     );
+    const hasTelegram = token.profile?.links?.some((link) =>
+      link.includes('t.me') || link.includes('telegram')
+    );
     const createdAt = new Date(token.createdAt);
     const creationTimeThreshold = new Date(Date.now() - CREATION_TIME_WINDOW_MS);
+    const volume = token.volume?.m5?.total || 0;
+
+
+    const volumeCondition = volume >= minVolume;
 
     // Hardcoded minPriceChange set to 0
     const minPriceChange = 0;
@@ -371,9 +414,10 @@ function App() {
       (!maxPriceChange || change <= parseFloat(maxPriceChange));
 
     const twitterCondition = !requireTwitter || hasTwitter;
+    const telegramCondition = !requireTelegram || hasTelegram;
     const creationTimeCondition = createdAt > creationTimeThreshold;
 
-    return changeCondition && twitterCondition && creationTimeCondition && nameCondition;
+    return changeCondition && twitterCondition && telegramCondition && creationTimeCondition && nameCondition && volumeCondition;
   });
   
     // Process token purchases sequentially
@@ -456,7 +500,7 @@ function App() {
   }
   // Set up interval to check pending transactions
   useEffect(() => {
-    const interval = setInterval(checkPendingTransactions, 5000); // Check every 5 seconds
+    const interval = setInterval(checkPendingTransactions, 3000); // Check every 5 seconds
     return () => clearInterval(interval);
   }, [connection]);
   
@@ -541,7 +585,7 @@ function App() {
   
       const txHash = await connection.sendTransaction(transaction, {
         skipPreflight: false,
-        maxRetries: 0,
+        maxRetries: maxRetries,
         preflightCommitment: "confirmed",
       });
   
@@ -593,9 +637,8 @@ function App() {
       console.log(`Amount bought (human-readable): ${amountBought}`);
   
       // Fetch latest price
-      const priceResponse = await fetchTokenPricesFromDexScreener([tokenAddress]);
       const currentPriceUsd =
-        priceResponse[tokenAddress] || parseFloat(token.priceUsd) || 0;
+        parseFloat(token.priceUsd) || 0;
   
       // Add to open positions
       const newPosition = {
@@ -716,7 +759,7 @@ function App() {
   
       const txHash = await connection.sendTransaction(transaction, {
         skipPreflight: false,
-        maxRetries: 0,
+        maxRetries: maxRetries,
         preflightCommitment: "confirmed",
       });
   
@@ -744,7 +787,7 @@ function App() {
         );
         openPositionsRef.current = openPositionsRef.current.filter((p) => p.address !== tokenAddress);
 
-      }, 30 * 1000); // 60 seconds (1 minute)
+      }, 1 * 1000); // 60 seconds (1 minute)
 
       } catch (error) {
         console.warn(
@@ -871,8 +914,9 @@ function App() {
 
     const twitterCondition = !requireTwitter || hasTwitter;
     const creationTimeCondition = createdAt > creationTimeThreshold;
+    
 
-    return changeCondition && twitterCondition && creationTimeCondition;
+    return changeCondition && twitterCondition && creationTimeCondition ;
   });
 
 
@@ -893,8 +937,8 @@ function App() {
         <Box
           sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
         >
-          <Typography variant="h3" component="h1" gutterBottom>
-            Moonshot Tokens
+          <Typography variant="h5" component="h1" gutterBottom>
+            New Tokens
           </Typography>
           {/* Auto-Buy Switch moved to Sidebar */}
         </Box>
@@ -918,7 +962,7 @@ function App() {
                   <TableCell align="right">24h Volume</TableCell>
                   <TableCell align="right">24h Change</TableCell>
                   <TableCell align="right">Market Cap</TableCell>
-                  <TableCell align="right">Progress</TableCell>
+                  <TableCell align="right">5m vol</TableCell>
                   <TableCell>Links</TableCell>
                   <TableCell>Created</TableCell>
                 </TableRow>
@@ -964,15 +1008,8 @@ function App() {
                         : "N/A"}
                     </TableCell>
                     <TableCell align="right" sx={{ width: "100px" }}>
-                      {token.moonshot?.progress !== undefined ? (
-                        <LinearProgress
-                          variant="determinate"
-                          value={token.moonshot.progress * 100}
-                          sx={{ height: 10, borderRadius: 5 }}
-                        />
-                      ) : (
-                        "N/A"
-                      )}
+                                {token.volume?.m5?.total?.toFixed(2) || 'N/A'}
+
                     </TableCell>
                     <TableCell>
                       {token.profile?.links && token.profile.links.length > 0 ? (
@@ -1007,7 +1044,7 @@ function App() {
 
       {/* Open Positions Table */}
       <Box sx={{ my: 4 }}>
-        <Typography variant="h4" component="h2" gutterBottom>
+        <Typography variant="h5" component="h2" gutterBottom>
           Open Positions
         </Typography>
         {openPositions.length > 0 ? (
@@ -1016,6 +1053,7 @@ function App() {
               <TableHead>
                 <TableRow>
                   <TableCell>Token</TableCell>
+
                   <TableCell align="right">Amount Bought</TableCell>
                   <TableCell align="right">Purchase Price (USD)</TableCell>
                   <TableCell align="right">Current Price (USD)</TableCell>
@@ -1040,6 +1078,7 @@ function App() {
         <TableCell component="th" scope="row">
           {position.name}
         </TableCell>
+        
         <TableCell align="right">
           {amountBoughtFloat.toFixed(4)}
         </TableCell>
@@ -1119,7 +1158,8 @@ function App() {
           </Typography>
         )}
         </Box>
-          </Box>
+        {/*<Radar tokens={filteredTokens} />*/}
+        </Box>
         </Grid>
         
 
@@ -1132,10 +1172,11 @@ function App() {
         height: "100vh",   
         backgroundColor: "background.paper",
         p: 2,
-        zIndex: 999,              // Ensure it's above other content
+        zIndex: 999,    
+        overflowY: "auto", // Enable scrolling if content overflows
       }}
     >
-
+        <Box sx={{width : '360px'}}>
           <Sidebar
             privateKey={privateKey}
             setPrivateKey={setPrivateKey}
@@ -1152,8 +1193,23 @@ function App() {
             requireTwitter={requireTwitter}
             setRequireTwitter={setRequireTwitter}
             nameFilter={nameFilter} // Pass nameFilter state
-  setNameFilter={setNameFilter} // Pass setter function
+            setNameFilter={setNameFilter} // Pass setter function
+            maxRetries={maxRetries} // Pass maxRetries state
+            setMaxRetries={setMaxRetries} // Pass setter function
+            stopLoss={stopLoss}
+            setStopLoss={setStopLoss}
+            takeProfitPercentage={takeProfitPercentage}
+            setTakeProfitPercentage={setTakeProfitPercentage}
+            requireTelegram={requireTelegram}
+            setRequireTelegram={setRequireTelegram}
+            trailingStopLoss={trailingStopLoss}
+            setTrailingStopLoss={setTrailingStopLoss}
+            inactivityThreshold={inactivityThreshold}
+            setInactivityThreshold={setInactivityThreshold}
+            minVolume={minVolume} // Pass minVolume state
+            setMinVolume={setMinVolume} // Pass setter function
           />
+          </Box>
 
           </Box>
 

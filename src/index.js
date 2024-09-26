@@ -6,8 +6,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import reportWebVitals from './reportWebVitals';
 
-const theme = createTheme();
-
+import {theme} from './MainApp'
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>

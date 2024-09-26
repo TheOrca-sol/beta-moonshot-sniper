@@ -1,0 +1,181 @@
+/* src/components/Login/Login.css */
+
+/* Reset default margins and paddings */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Login Page */
+  .login-page {
+    display: flex; /* Enable Flexbox */
+    align-items: center; /* Vertically center */
+    justify-content: center; /* Horizontally center */
+    position: relative;
+    min-height: 100vh;
+    background-color: black;
+    overflow: hidden;
+  }
+  
+  /* Login Container */
+  .login-container {
+    position: relative;
+    z-index: 1; /* Ensure it sits above the starfield */
+    background: rgba(0, 0, 0, 0.7); /* Semi-transparent background */
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    max-width: 500px; /* Optional: Limit the maximum width */
+    width: 90%; /* Responsive width */
+  }
+  
+  /* Login Box */
+  .login-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  /* Login Title */
+  .login-title {
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    animation: glow 2s ease-in-out infinite;
+  }
+  
+  /* Login Subtitle */
+  .login-subtitle {
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
+  }
+  
+  /* Terminal Container */
+  .terminal-container {
+    background-color: black;
+    border: 1px solid #00ff00;
+    padding: 1rem;
+    border-radius: 5px;
+    margin-bottom: 2rem;
+    height: 5rem;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3) inset;
+  }
+  
+  /* Terminal Text */
+  .terminal-text {
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1.2rem;
+    white-space: pre-wrap;
+  }
+  
+  /* Cursor */
+  .cursor {
+    display: inline-block;
+    width: 10px;
+    height: 1.2rem;
+    background-color: #00ff00;
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
+  }
+  
+  /* Login Button */
+  .login-button {
+    background-color: #00ff00;
+    color: black;
+    font-weight: bold;
+    transition: transform 0.3s, background 0.3s, box-shadow 0.3s;
+    box-shadow: 0 0 10px #00ff00;
+    padding: 0.75rem 1.5rem;
+    border-radius: 5px;
+    width: 100%;
+  }
+  
+  .login-button:hover {
+    background: linear-gradient(45deg, #00ff00, #00cc00);
+    transform: scale(1.05);
+    box-shadow: 0 0 20px #00ff00;
+  }
+  
+  /* Keyframe Animations */
+  
+  /* Blink Animation for Cursor */
+  @keyframes blink {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+  
+  /* Glow Animation for Title */
+  @keyframes glow {
+    0%, 100% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00; }
+    50% { text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00; }
+  }
+  
+  /* Responsive Design */
+  @media (max-width: 600px) {
+    .login-container {
+      padding: 1.5rem;
+      border-radius: 8px;
+    }
+  
+    .login-title {
+      font-size: 1.5rem;
+    }
+  
+    .login-subtitle {
+      font-size: 1rem;
+    }
+  
+    .terminal-container {
+      height: 4rem;
+    }
+  
+    .terminal-text {
+      font-size: 1rem;
+    }
+  
+    .login-button {
+      padding: 0.5rem 1rem;
+    }
+  }
+  
+  /* Sniper Description and Instructions */
+  .sniper-info {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 2rem;
+  }
+  
+  .sniper-info h5, .sniper-info h6 {
+    color: #00ff00;
+  }
+  
+  .sniper-info ol {
+    padding-left: 1.5rem;
+  }
+  
+  /* Footer */
+  .footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .footer a {
+    color: #00ff00;
+    text-decoration: none;
+  }
+  
+  .footer a:hover {
+    text-decoration: underline;
+  }

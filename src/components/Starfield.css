@@ -1,0 +1,10 @@
+/* src/components/Starfield.css */
+
+.starfield-canvas {
+    position: fixed; /* Keeps the canvas fixed in the viewport */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* Places the canvas behind other elements */
+  }

@@ -13,26 +13,30 @@
     "@testing-library/user-event": "^13.5.0",
     "@wen-moon-ser/moonshot-sdk": "^2.0.6",
     "assert": "^2.1.0",
-    "axios": "^1.7.7",
+    "axios": "^0.21.1",
     "big.js": "^6.2.2",
     "bs58": "^6.0.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.0",
     "jwt-decode": "^4.0.0",
+    "lucide-react": "^0.445.0",
     "process": "^0.11.10",
     "react": "^18.3.1",
-    "react-app-rewired": "^2.2.1",
+    "react-app-rewired": "^2.1.8",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
     "react-scripts": "5.0.1",
     "react-toastify": "^10.0.5",
+    "recharts": "^2.12.7",
     "stream-browserify": "^3.0.0",
+    "twitter-api-v2": "^1.17.2",
+    "util": "^0.12.5",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
+    "start": "react-app-rewired start",
+    "build": "react-app-rewired build",
+    "test": "react-app-rewired test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -58,5 +62,14 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  }
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-runtime": "^7.14.5",
+    "browserify-zlib": "^0.2.0",
+    "https-browserify": "^1.0.0",
+    "os-browserify": "^0.3.0",
+    "stream-http": "^3.2.0",
+    "url": "^0.11.4"
+  },
+  "proxy": "http://localhost:5000"
 }
