@@ -8,7 +8,7 @@ import AuthCallback from './AuthCallback';
 import ProtectedRoute from './ProtectedRoute';
 import { AuthContext } from './AuthContext';
 import TokenListComponent from './TokenListComponent';
-
+import VolumeBooster from './VolumeBooster';
 function App() {
   const [auth, setAuth] = useState(false);
   const [token, setToken] = useState(null);
@@ -35,6 +35,8 @@ function App() {
           />
           <Route path="/login" element={<Login />} />
           <Route path="/tokenanlysis" element={<TokenListComponent />} />
+          <Route path="/volumebooster" element={<VolumeBooster/>} />
+
           
 
           <Route path="/auth" element={<AuthCallback />} />

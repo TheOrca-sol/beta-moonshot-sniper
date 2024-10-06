@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -21,12 +21,15 @@ import {
 } from '@mui/material';
 import InsertChartIcon from '@mui/icons-material/InsertChart';
 import InfoIcon from '@mui/icons-material/Info';
+import ImageIcon from '@mui/icons-material/Image';
 import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import { PublicKey } from "@solana/web3.js";
 import evaluateTwitterProfile from '../utils/twitterEvaluator';
 import { extractTwitterHandle } from '../utils/extractTwitterHandle';
+import PnLCard from './PnLCard';
+import html2canvas from 'html2canvas';
 
-function OpenPositionsTable({ openPositions, sellToken, connection }) {
+function OpenPositionsTable({ openPositions, sellToken, connection, useJito, jitoTipLamports, solPrice }) {
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [selectedToken, setSelectedToken] = useState(null);
     const [creatorSupply, setCreatorSupply] = useState(null);
@@ -34,6 +37,8 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
     const [isEvaluatingTwitter, setIsEvaluatingTwitter] = useState(false);
     const [twitterAnalytics, setTwitterAnalytics] = useState(null);
     const [isLoadingTwitter, setIsLoadingTwitter] = useState(false);
+    const [selectedPosition, setSelectedPosition] = useState(null);
+    const [isPnLCardOpen, setIsPnLCardOpen] = useState(false);
   
     const fetchTokenAmount = async (ownerAddress, tokenAddress) => {
       try {
@@ -123,7 +128,77 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
       setTwitterEvaluation(null);
     };
 
-    
+    const handleOpenPnLCard = useCallback((position) => {
+      const invested = position.collateralAmountSol;
+      const currentValue = position.amountBought * position.currentPrice / solPrice;
+      const profit = currentValue - invested;
+      
+      setSelectedPosition({
+        ...position,
+        invested,
+        currentValue,
+        profit
+      });
+      setIsPnLCardOpen(true);
+    }, [solPrice]);
+
+    const handleClosePnLCard = () => {
+      setIsPnLCardOpen(false);
+    };
+
+    const handleDownloadPnLCard = () => {
+      const card = document.getElementById('pnl-card');
+      html2canvas(card, {
+        backgroundColor: null,
+        scale: 2,
+        logging: false,
+        useCORS: true
+      }).then((canvas) => {
+        // Create a new canvas with the same dimensions
+        const newCanvas = document.createElement('canvas');
+        newCanvas.width = canvas.width;
+        newCanvas.height = canvas.height;
+        const ctx = newCanvas.getContext('2d');
+
+        // Draw a rounded rectangle path
+        const radius = 48; // Adjust this value to match the card's border radius
+        ctx.beginPath();
+        ctx.moveTo(radius, 0);
+        ctx.lineTo(canvas.width - radius, 0);
+        ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
+        ctx.lineTo(canvas.width, canvas.height - radius);
+        ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
+        ctx.lineTo(radius, canvas.height);
+        ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
+        ctx.lineTo(0, radius);
+        ctx.quadraticCurveTo(0, 0, radius, 0);
+        ctx.closePath();
+
+        // Clip to the rounded rectangle and draw the original canvas
+        ctx.clip();
+        ctx.drawImage(canvas, 0, 0);
+
+        const link = document.createElement('a');
+        link.download = `${selectedPosition.symbol}_pnl.png`;
+        link.href = newCanvas.toDataURL('image/png');
+        link.click();
+      });
+    };
+
+    const memoizedPnLCard = useMemo(() => {
+      if (selectedPosition && isPnLCardOpen) {
+        return (
+          <PnLCard
+            coinName={selectedPosition.symbol}
+            invested={selectedPosition.invested}
+            roi={selectedPosition.roi}
+            profit={selectedPosition.profit}
+            solPrice={solPrice}
+          />
+        );
+      }
+      return null;
+    }, [selectedPosition, isPnLCardOpen]);
 
   if (openPositions.length === 0) {
     return (
@@ -146,9 +221,7 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
             <TableCell align="right">ROI (%)</TableCell>
             <TableCell align="right">Current Value (USD)</TableCell>
             <TableCell align="right">Profit/Loss (USD)</TableCell>
-            <TableCell align="right">Sell</TableCell>
-            <TableCell align="center">Chart</TableCell>
-            <TableCell align="center">More Details</TableCell>
+            
           </TableRow>
         </TableHead>
         <TableBody>
@@ -191,7 +264,7 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
                   <Button
                     variant="contained"
                     color="error"
-                    onClick={() => sellToken(position)}
+                    onClick={() => sellToken(position, useJito, jitoTipLamports)}
                     disabled={
                       position.sellStatus === "loading" ||
                       position.sellStatus === "success" ||
@@ -219,14 +292,18 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
                       <InsertChartIcon />
                     </IconButton>
                   </Tooltip>
-                </TableCell>
-                <TableCell align="center">
-                    <Tooltip title="View More Details" arrow>
+                  <Tooltip title="View More Details" arrow>
                     <IconButton onClick={() => handleOpenPopup(position)}>
                     <InfoIcon />
                     </IconButton>
                     </Tooltip>
+                    <Tooltip title="View PnL Card" arrow>
+                    <IconButton onClick={() => handleOpenPnLCard(position)}>
+                    <ImageIcon />
+                    </IconButton>
+                    </Tooltip>
                 </TableCell>
+                
               </TableRow>
             );
           })}
@@ -282,13 +359,11 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
               {!isLoadingTwitter && twitterAnalytics && (
                 <>
                   <Typography variant="h6" style={{ marginTop: '20px' }}>Twitter Analytics</Typography>
-                  <Typography>Followers: {twitterAnalytics.followerCount}</Typography>
-                  <Typography>Following: {twitterAnalytics.followingCount}</Typography>
-                  <Typography>Tweet Count: {twitterAnalytics.tweetCount}</Typography>
-                  <Typography>Average Engagement: {twitterAnalytics.averageEngagement.toFixed(2)}</Typography>
-                  <Typography>Account Age (days): {twitterAnalytics.accountAge}</Typography>
-                  <Typography>Summary: {twitterAnalytics.evaluationSummary}</Typography>
-                </>
+                  <Typography>Followers: {twitterAnalytics.followerCount || 'N/A'}</Typography>
+                  <Typography>Following: {twitterAnalytics.followingCount || 'N/A'}</Typography>
+                  <Typography>Tweet Count: {twitterAnalytics.tweetCount || 'N/A'}</Typography>
+                  <Typography>Account Age (days): {twitterAnalytics.accountAge ? twitterAnalytics.accountAge.toFixed(2) : 'N/A'}</Typography>
+                  </>
               )}
               
               {!isLoadingTwitter && !twitterAnalytics && selectedToken.profile?.links?.find(link => 
@@ -304,8 +379,20 @@ function OpenPositionsTable({ openPositions, sellToken, connection }) {
         </DialogActions>
       </Dialog>
     
+    <Dialog open={isPnLCardOpen} onClose={handleClosePnLCard}>
+      <DialogTitle>PnL Card</DialogTitle>
+      <DialogContent>
+        <div id="pnl-card-outer">
+          {memoizedPnLCard}
+        </div>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleDownloadPnLCard}>Download</Button>
+        <Button onClick={handleClosePnLCard}>Close</Button>
+      </DialogActions>
+    </Dialog>
   </>
   );
 }
 
-export default OpenPositionsTable;
+export default React.memo(OpenPositionsTable);

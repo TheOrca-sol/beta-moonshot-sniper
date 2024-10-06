@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Table,
     TableBody,
@@ -39,6 +39,9 @@ import { getAssociatedTokenAddress, getAccount } from "@solana/spl-token";
 import Big from "big.js";
 import 'react-toastify/dist/ReactToastify.css';
 import bs58 from 'bs58';
+import bs64 from 'base64-js'; // Install this library if you haven't already
+import { debounce } from 'lodash';
+
 import {
     Language as WebsiteIcon,
     Twitter as TwitterIcon,
@@ -47,6 +50,8 @@ import {
   } from "@mui/icons-material";
   import { Environment, FixedSide, Moonshot } from "@wen-moon-ser/moonshot-sdk";
   import { styled } from '@mui/system';
+  import { sendBundle } from './utils/jitoUtils';
+  import notificationSound from './assets/notification.mp3';
   
 
 
@@ -92,7 +97,7 @@ function AdvancedSniperDashboard() {
     // State for Private Key and RPC URL
     const [privateKey, setPrivateKey] = useState('');
     const [rpcUrl, setRpcUrl] = useState(''); // Default RPC URL
-    const [creationTimeFilter, setCreationTimeFilter] = useState(0);
+    const [creationTimeFilter, setCreationTimeFilter] = useState(2);
 
     // State for Connection and Keypair
     const [keypair, setKeypair] = useState(null);
@@ -110,7 +115,10 @@ function AdvancedSniperDashboard() {
     const [trailingStopLoss, setTrailingStopLoss] = useState(0);
     const [inactivityThreshold, setInactivityThreshold] = useState(10);
     const [minVolume, setMinVolume] = useState(0); // Add volume state
-
+    const [useJito, setUseJito] = useState(false);
+    const [jitoTipLamports, setJitoTipLamports] = useState(200000);
+    const [priorityFee, setPriorityFee] = useState(200000);
+    const audio = new Audio(notificationSound);
   
   
   
@@ -181,7 +189,6 @@ function AdvancedSniperDashboard() {
   
     // Constants
     const TOTAL_SUPPLY = 1000000000; // 1,000,000,000 tokens
-    const CREATION_TIME_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
   
   
     const fetchTokenPricesFromDexScreener = async (tokenAddresses) => {
@@ -283,69 +290,70 @@ function AdvancedSniperDashboard() {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoBuyEnabled, connection, moonshot]);
   
-    // Update open positions every 10 seconds based on latest prices from DexScreener
+    const debouncedSetOpenPositions = useCallback(
+      debounce((updatedPositions) => {
+        setOpenPositions(updatedPositions);
+        openPositionsRef.current = updatedPositions;
+      }, 200),
+      []
+    );
+
+    const updatePositions = useCallback(async () => {
+      const positions = openPositionsRef.current;
+      if (positions.length === 0) return;
+
+      try {
+        const tokenAddresses = positions.map(position => position.address);
+        const pricesFromDexScreener = await fetchTokenPricesFromDexScreener(tokenAddresses);
+
+        const updatedPositions = positions.map((position) => {
+          const currentPrice = pricesFromDexScreener[position.address] || position.currentPrice || 0;
+          const roi = position.purchasePrice > 0
+            ? ((currentPrice - position.purchasePrice) / position.purchasePrice) * 100
+            : 0;
+
+          // Only update highestPrice and check trailing stop if trailingStopLoss > 0
+          let highestPrice = position.highestPrice || position.purchasePrice;
+          let shouldSellDueToTrailingStop = false;
+
+          if (trailingStopLoss > 0) {
+            highestPrice = Math.max(highestPrice, currentPrice);
+            const trailingStopPrice = highestPrice * (1 - trailingStopLoss / 100);
+            shouldSellDueToTrailingStop = currentPrice <= trailingStopPrice;
+          }
+
+          // Check if the price has dropped below the stop loss percentage
+          const shouldSellDueToStopLoss = stopLoss > 0 && roi <= -stopLoss;
+
+          // Check if the price has reached or exceeded the take profit percentage
+          const shouldSellDueToTakeProfit = takeProfitPercentage > 0 && roi >= takeProfitPercentage;
+
+          // Trigger a sell if any of the conditions are met
+          if (shouldSellDueToTrailingStop || shouldSellDueToStopLoss || shouldSellDueToTakeProfit) {
+            sellToken(position);
+          }
+
+          return {
+            ...position,
+            currentPrice,
+            highestPrice,
+            roi,
+          };
+        });
+
+        debouncedSetOpenPositions(updatedPositions);
+        setError(null);
+      } catch (error) {
+        console.error("Error updating positions:", error);
+        setError("Failed to update positions. Please try again later.");
+      }
+    }, [stopLoss, takeProfitPercentage, trailingStopLoss, sellToken]);
+
     useEffect(() => {
-      const updatePositions = async () => {
-        const positions = openPositionsRef.current;
-        if (positions.length === 0) return;
-  
-        try {
-          // Extract all token addresses from open positions
-          const tokenAddresses = positions.map((position) => position.address);
-  
-          // Fetch current prices from DexScreener
-          const pricesFromDexScreener = await fetchTokenPricesFromDexScreener(tokenAddresses);
-  
-  
-          const updatedPositions = positions.map((position) => {
-          const currentPrice = pricesFromDexScreener[position.address] || position.currentPrice || 0; // Fallback to existing price
-            const roi =
-              position.purchasePrice > 0
-                ? ((currentPrice - position.purchasePrice) / position.purchasePrice) * 100
-                : 0;
-              // Track highest price for trailing stop loss
-              const highestPrice = position.highestPrice
-              ? Math.max(position.highestPrice, currentPrice)
-              : currentPrice;
-  
-              const trailingStopPrice = highestPrice * (1 - trailingStopLoss / 100);
-  
-              // Check if price drops below trailing stop price
-              const shouldSellDueToTrailingStop = currentPrice <= trailingStopPrice;
-  
-              // Check if the price has dropped below the stop loss percentage
-              const shouldSellDueToStopLoss = roi <= -stopLoss;
-  
-              // Check if the price has reached or exceeded the take profit percentage
-              const shouldSellDueToTakeProfit = takeProfitPercentage && roi >= takeProfitPercentage;
-  
-              // Trigger a sell if any of the conditions are met
-              if (shouldSellDueToTrailingStop || shouldSellDueToStopLoss || shouldSellDueToTakeProfit) {
-                sellToken(position);
-              }
-  
-            return {
-              ...position,
-              currentPrice,
-              highestPrice,
-              roi,
-            };
-          });
-  
-          setOpenPositions(updatedPositions);
-          openPositionsRef.current = updatedPositions; // Update the ref
-          setError(null); // Clear previous errors
-        } catch (error) {
-          console.error("Error updating positions:", error);
-          setError("Failed to update positions. Please try again later.");
-        }
-      };
-  
-      const interval = setInterval(updatePositions, 2000); // Update every 10 seconds
-  
+      const interval = setInterval(updatePositions, 2000); // Update every 2 seconds
+
       return () => clearInterval(interval);
-  
-    }, [stopLoss,takeProfitPercentage, trailingStopLoss]); // Removed [tokens] dependency to allow continuous updates
+    }, [updatePositions]);
   
     // Function to fetch and display tokens
     async function fetchAndDisplayTokens() {
@@ -400,7 +408,9 @@ function AdvancedSniperDashboard() {
         link.includes('t.me') || link.includes('telegram')
       );
       const createdAt = new Date(token.createdAt);
-      const creationTimeThreshold = new Date(Date.now() - CREATION_TIME_WINDOW_MS);
+      const creationTimeWindowMs = creationTimeFilter * 60 * 1000; // Convert minutes to milliseconds
+
+      const creationTimeThreshold = new Date(Date.now() - creationTimeWindowMs);
       const volume = token.volume?.m5?.total || 0;
   
   
@@ -513,46 +523,45 @@ function AdvancedSniperDashboard() {
     // Function to buy a token
     async function buyToken(token) {
       if (!moonshot || !connection || !keypair || !autoBuyEnabled) return;
-    
-      const tokenAddress = token.baseToken.address;
-    
+
+      const tokenAddress = new PublicKey(token.baseToken.address);
+      const userTokenAccountAddress = await getAssociatedTokenAddress(
+        tokenAddress,
+        keypair.publicKey
+      );
+
+      // Fetch the previous balance
+      let previousBalance = 0;
+      try {
+        const accountInfo = await getAccount(connection, userTokenAccountAddress);
+        previousBalance = Number(accountInfo.amount);
+      } catch (error) {
+        // If the account doesn't exist pre-transaction, it's fine, leave it as 0
+        console.log("No previous balance found, assuming 0");
+      }
+
       // Validate collateral amount
       if (collateralAmountSol <= 0 || isNaN(collateralAmountSol)) {
         console.error("Invalid collateral amount. Cannot proceed with purchase.");
         setError("Invalid collateral amount. Cannot proceed with purchase.");
         return;
       }
-    
+
       // Ensure SOL price is available
       if (!solPrice) {
         console.error("SOL price not available. Cannot proceed with purchase.");
         setError("SOL price not available. Cannot proceed with purchase.");
         return;
       }
-    
+
       try {
         // Mark token as being processed
-        processingTokensRef.current.add(tokenAddress);
-    
-        // Fetch the user's associated token account before the transaction
-        const userTokenAccountAddress = await getAssociatedTokenAddress(
-          new PublicKey(tokenAddress),
-          keypair.publicKey
-        );
-    
-        let previousBalance = 0;
-        try {
-          const accountInfo = await getAccount(connection, userTokenAccountAddress);
-          previousBalance = Number(accountInfo.amount);
-        } catch (error) {
-          // If the account doesn't exist, previous balance is 0
-          previousBalance = 0;
-        }
-    
+        processingTokensRef.current.add(tokenAddress.toString());
+
         const moonshotToken = moonshot.Token({
-          mintAddress: tokenAddress,
+          mintAddress: tokenAddress.toString(),
         });
-    
+
         // Prepare transaction
         const collateralAmount = BigInt(
           Math.round(collateralAmountSol * LAMPORTS_PER_SOL)
@@ -561,130 +570,160 @@ function AdvancedSniperDashboard() {
           collateralAmount,
           tradeDirection: "BUY",
         });
-    
+
         const { ixs } = await moonshotToken.prepareIxs({
           slippageBps: slippageBps,
           creatorPK: keypair.publicKey.toBase58(),
-          tokenAmount,
-          collateralAmount,
+          tokenAmount: tokenAmount.toString(),
+          collateralAmount: collateralAmount.toString(),
           tradeDirection: "BUY",
           fixedSide: FixedSide.IN,
         });
-    
+
         if (!ixs || ixs.length === 0) {
           throw new Error("No instructions to send in transaction.");
         }
-    
+
         const priorityIx = ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: 200_000,
+          microLamports: priorityFee,
         });
-    
+
         const blockhash = await connection.getLatestBlockhash("confirmed");
         const messageV0 = new TransactionMessage({
           payerKey: keypair.publicKey,
           recentBlockhash: blockhash.blockhash,
           instructions: [priorityIx, ...ixs],
         }).compileToV0Message();
-    
+
         const transaction = new VersionedTransaction(messageV0);
         transaction.sign([keypair]);
-    
-        const txHash = await connection.sendTransaction(transaction, {
-          skipPreflight: false,
-          maxRetries: maxRetries,
-          preflightCommitment: "confirmed",
-        });
-    
-        // Confirm the transaction with extended timeout
-        try {
-          const confirmation = await confirmTransactionWithTimeout(
-            connection,
-            txHash,
-            60000 // 60 seconds
+
+        let txHash;
+
+        if (useJito) {
+          // Use Jito for transaction
+          const tipLamports = jitoTipLamports;
+          txHash = await sendBundle(
+            [transaction], 
+            blockhash.blockhash, 
+            blockhash.lastValidBlockHeight, 
+            tipLamports, 
+            keypair.publicKey, 
+            keypair, 
+            connection
           );
-          console.log(
-            `Bought token ${token.baseToken.symbol} for ${collateralAmountSol} SOL. Transaction Hash:`,
-            txHash
-          );
-        } catch (error) {
-          console.warn(
-            `Transaction ${txHash} not confirmed within timeout. It may still succeed.`
-          );
-          throw error; // Re-throw to prevent adding to openPositions
+          
+          console.log(`Jito bundle sent for token ${token.baseToken.symbol}. Bundle ID:`, txHash);
+          // For Jito transactions, we need to wait a bit longer
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+        } else {
+          // Use normal transaction sending
+          txHash = await connection.sendTransaction(transaction, {
+            skipPreflight: false,
+            maxRetries: maxRetries,
+            preflightCommitment: "confirmed",
+          });
+
+          // Confirm the transaction with extended timeout only for non-Jito transactions
+          try {
+            const confirmation = await confirmTransactionWithTimeout(
+              connection,
+              txHash,
+              60000 // 60 seconds
+            );
+            console.log(
+              `Bought token ${token.baseToken.symbol} for ${collateralAmountSol} SOL. Transaction Hash:`,
+              txHash
+            );
+          } catch (error) {
+            console.warn(
+              `Transaction ${txHash} not confirmed within timeout. It may still succeed.`
+            );
+          }
         }
-    
+
         // Fetch the user's associated token account after the transaction
         let newBalance = 0;
-        try {
-          const accountInfo = await getAccount(connection, userTokenAccountAddress);
-          newBalance = Number(accountInfo.amount);
-        } catch (error) {
-          // If the account doesn't exist post-transaction, which is unlikely, set to 0
-          newBalance = 0;
+        let retries = 5;
+        while (retries > 0) {
+          try {
+            const accountInfo = await getAccount(connection, userTokenAccountAddress);
+            newBalance = Number(accountInfo.amount);
+            break; // If successful, exit the loop
+          } catch (error) {
+            console.log(`Attempt to fetch new balance failed. Retries left: ${retries}`);
+            retries--;
+            if (retries === 0) {
+              console.error("Error fetching new balance:", error);
+              throw new Error("Failed to fetch new token balance after purchase");
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds before retrying
+          }
         }
-    
+
         // Calculate the actual amount bought
         const actualAmountBought = newBalance - previousBalance;
-    
+
         // Ensure that some tokens were actually bought
         if (actualAmountBought <= 0) {
           throw new Error("No tokens were bought. Please check the transaction.");
         }
-    
+
         console.log(`Actual amount bought: ${actualAmountBought}`);
-    
+
         // Convert to human-readable format based on decimals
-        const amountBoughtDecimals =
-          token.decimals !== undefined ? token.decimals : 9;
+        const amountBoughtDecimals = token.baseToken.decimals || 9;
         const amountBought = Number(
           Big(actualAmountBought.toString()).div(Big(10).pow(amountBoughtDecimals))
         );
-    
+
         console.log(`Amount bought (human-readable): ${amountBought}`);
-    
+
         // Fetch latest price
-        const currentPriceUsd =
-          parseFloat(token.priceUsd) || 0;
-    
+        const currentPriceUsd = parseFloat(token.priceUsd) || 0;
+
         // Add to open positions
         const newPosition = {
-          id: txHash, // Unique identifier for React keys
-          address: tokenAddress,
+          id: txHash,
+          address: tokenAddress.toString(),
           symbol: token.baseToken.symbol,
           name: token.baseToken.name,
           purchasePrice: currentPriceUsd,
-          amountBought,
+          amountBought: amountBought,
           collateralAmountSol,
           totalCostUsd: collateralAmountSol * solPrice,
           purchaseTime: new Date(),
           currentPrice: currentPriceUsd,
           roi: 0,
           sellStatus: "idle",
-          decimals: amountBoughtDecimals, // Store the token decimals
-          baseToken: token.baseToken, // Include the entire baseToken object
+          decimals: amountBoughtDecimals,
+          baseToken: token.baseToken,
           moonshot: token.moonshot,
-          profile: token.profile, // Add this line to include the profile information
+          profile: token.profile,
         };
-    
+
         setOpenPositions((prevPositions) => {
-          // Check if position already exists
-          const exists = prevPositions.some((p) => p.address === tokenAddress);
+          const exists = prevPositions.some((p) => p.address === tokenAddress.toString());
           if (exists) {
             console.log(`Position for ${newPosition.symbol} already exists.`);
             return prevPositions;
           }
           const updatedPositions = [...prevPositions, newPosition];
           openPositionsRef.current = updatedPositions;
+
+          // Play notification sound
+          audio.play().catch(error => console.error("Error playing audio:", error));
+
           return updatedPositions;
         });
-    
+
         setError(null); // Clear previous errors
       } catch (error) {
         console.error(`Error buying token ${token.baseToken.symbol}:`, error);
         setError(`Error buying token ${token.baseToken.symbol}. Please try again.`);
       } finally {
         // Remove token from processingTokensRef regardless of success or failure
-        processingTokensRef.current.delete(tokenAddress);
+        processingTokensRef.current.delete(tokenAddress.toString());
       }
     }
     
@@ -692,133 +731,126 @@ function AdvancedSniperDashboard() {
     
     
     
+    
   
     // Function to sell a token
-    async function sellToken(position) {
+    async function sellToken(position, useJito = false) {
       const {
         address: tokenAddress,
         symbol,
         sellStatus,
         amountBought,
-        decimals, // Get the stored decimals
+        decimals,
       } = position;
-    
-      // Prevent initiating another sell if already in progress or recently sold
+
       if (sellStatus === "loading" || sellStatus === "success") {
         console.log(`Sell operation already in progress for ${symbol}.`);
         return;
       }
-    
+
       try {
         setOpenPositions((prevPositions) =>
           prevPositions.map((p) =>
             p.address === tokenAddress ? { ...p, sellStatus: "loading" } : p
           )
         );
-    
+
         if (!moonshot || !connection || !keypair) {
           throw new Error("Moonshot SDK, connection, or keypair not initialized.");
         }
-    
-        // Initialize Moonshot Token for Selling
+
         const moonshotToken = moonshot.Token({
           mintAddress: tokenAddress,
         });
-    
-        // Use the stored decimals, fallback to 9 if undefined
+
         const tokenDecimals = decimals !== undefined ? decimals : 9;
-    
-        // Convert amountBought back to smallest unit
         const tokenAmount = BigInt(
           Math.round(amountBought * Math.pow(10, tokenDecimals))
         );
-    
+
         console.log(`Attempting to sell ${tokenAmount.toString()} units of token ${symbol}`);
-    
-        // Calculate the collateral amount for selling
+
         const collateralAmount = await moonshotToken.getCollateralAmountByTokens({
           tokenAmount,
           tradeDirection: "SELL",
         });
-    
-        // Prepare the transaction instructions using Moonshot SDK
+
         const { ixs } = await moonshotToken.prepareIxs({
           slippageBps: slippageBps,
           creatorPK: keypair.publicKey.toBase58(),
-          tokenAmount,
-          collateralAmount,
+          tokenAmount: tokenAmount.toString(),
+          collateralAmount: collateralAmount.toString(),
           tradeDirection: "SELL",
           fixedSide: FixedSide.IN,
         });
-    
+
         const priorityIx = ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: 200_000,
+          microLamports: priorityFee,
         });
-    
+
         const blockhash = await connection.getLatestBlockhash("confirmed");
-    
+
         const messageV0 = new TransactionMessage({
           payerKey: keypair.publicKey,
           recentBlockhash: blockhash.blockhash,
           instructions: [priorityIx, ...ixs],
         }).compileToV0Message();
-    
+
         const transaction = new VersionedTransaction(messageV0);
         transaction.sign([keypair]);
-    
-        const txHash = await connection.sendTransaction(transaction, {
-          skipPreflight: false,
-          maxRetries: maxRetries,
-          preflightCommitment: "confirmed",
-        });
-    
+
+        let txHash;
+
+        if (useJito) {
+          // Use Jito for transaction
+          const tipLamports = jitoTipLamports;
+          txHash = await sendBundle([transaction], blockhash.blockhash, blockhash.lastValidBlockHeight, tipLamports, keypair.publicKey, keypair, connection);
+          console.log(`Jito bundle sent for selling token ${symbol}. Bundle ID:`, txHash);
+          // For Jito transactions, we need to wait a bit longer
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+        } else {
+          // Use normal transaction sending
+          txHash = await connection.sendTransaction(transaction, {
+            skipPreflight: false,
+            maxRetries: maxRetries,
+            preflightCommitment: "confirmed",
+          });
+        }
+
         // Confirm the transaction with extended timeout
         try {
           await confirmTransactionWithTimeout(
             connection,
             txHash,
-            30000 // 60 seconds
+            30000 // 30 seconds
           );
           console.log(`Sold token ${symbol}. Transaction Hash:`, txHash);
-    
-          // Update Sell Status to 'success'
-          setOpenPositions((prevPositions) =>
-            prevPositions.map((p) =>
-              p.address === tokenAddress ? { ...p, sellStatus: "success" } : p
-            )
+        } catch (error) {
+          console.warn(
+            `Transaction ${txHash} not confirmed within timeout. It may still succeed.`
           );
-          toast.success(`Successfully sold token ${symbol}!`);
-  
-           // Set a timeout to remove the sold token after 1 minute
+        }
+
+        setOpenPositions((prevPositions) =>
+          prevPositions.map((p) =>
+            p.address === tokenAddress ? { ...p, sellStatus: "success" } : p
+          )
+        );
+        toast.success(`Successfully sold token ${symbol}!`);
+
+        // Set a timeout to remove the sold token after 1 minute
         setTimeout(() => {
           setOpenPositions((prevPositions) =>
             prevPositions.filter((p) => p.address !== tokenAddress)
           );
           openPositionsRef.current = openPositionsRef.current.filter((p) => p.address !== tokenAddress);
-  
-        }, 1 * 1000); // 60 seconds (1 minute)
-  
-        } catch (error) {
-          console.warn(
-            `Transaction ${txHash} not confirmed within timeout. It may still succeed.`
-          );
-           // Optionally, set sell status to 'pending' or handle retries
-           setOpenPositions((prevPositions) =>
-            prevPositions.map((p) =>
-              p.address === tokenAddress ? { ...p, sellStatus: "pending" } : p
-            )
-          );
-    
-          toast.warn(`Transaction not confirmed within timeout for token ${symbol}.`);
-        }
-    
-        
-        
+        }, 2 * 1000); // 60 seconds (1 minute)
+
       } catch (error) {
         console.error(`Error selling token ${symbol}:`, error);
-    
+
         let errorMessage = `Error selling token ${symbol}. Please try again.`;
-    
+
         // Parse specific errors based on error messages
         if (error.message.includes("SlippageOverflow")) {
           errorMessage = "Transaction failed due to slippage overflow. Please adjust your slippage settings.";
@@ -829,18 +861,16 @@ function AdvancedSniperDashboard() {
         } else if (error.message.includes("Account does not exist")) {
           errorMessage = "The token account does not exist. Please try again later.";
         }
-    
+
         setError(errorMessage);
         toast.error(errorMessage);
-    
-        // Update Sell Status to 'failed'
+
         setOpenPositions((prevPositions) =>
           prevPositions.map((p) =>
             p.address === tokenAddress ? { ...p, sellStatus: "failed" } : p
           )
         );
-    
-        // Revert Sell Status Back to 'idle' After 3 Seconds
+
         setTimeout(() => {
           setOpenPositions((prevPositions) =>
             prevPositions.map((p) =>
@@ -848,8 +878,7 @@ function AdvancedSniperDashboard() {
             )
           );
         }, 3000); // 3 seconds
-    
-        // Remove token from purchasedTokensRef.current to allow retrying
+
         purchasedTokensRef.current.delete(tokenAddress);
         toast.error(`Failed to sell token ${symbol}: ${error.message}`);
       }
@@ -909,7 +938,9 @@ function AdvancedSniperDashboard() {
         link.includes('twitter.com') || link.includes('x.com')
       );
       const createdAt = new Date(token.createdAt);
-      const creationTimeThreshold = new Date(Date.now() - CREATION_TIME_WINDOW_MS);
+      const creationTimeWindowMs = creationTimeFilter * 60 * 1000; // Convert minutes to milliseconds
+
+      const creationTimeThreshold = new Date(Date.now() - creationTimeWindowMs);
   
       // Hardcoded minPriceChange set to 0
       const minPriceChange = 0;
@@ -936,7 +967,14 @@ function AdvancedSniperDashboard() {
             <TokenRadar tokens={filteredTokens} loading={loading} />
             <Box>
               
-              <OpenPositionsTable openPositions={openPositions} sellToken={sellToken}  connection={connection}/>
+              <OpenPositionsTable 
+                openPositions={openPositions} 
+                sellToken={useCallback(sellToken, [])}
+                connection={connection}
+                useJito={useJito}
+                jitoTipLamports={jitoTipLamports}
+                solPrice={solPrice}
+              />
             </Box>
           </LeftColumnContainer>
         </Grid>
@@ -974,6 +1012,13 @@ function AdvancedSniperDashboard() {
             setMinVolume={setMinVolume}
             creationTimeFilter={creationTimeFilter}
             setCreationTimeFilter={setCreationTimeFilter}
+            useJito={useJito}
+            setUseJito={setUseJito}
+            jitoTipLamports={jitoTipLamports}
+            setJitoTipLamports={setJitoTipLamports}
+            priorityFee={priorityFee}
+            setPriorityFee={setPriorityFee}
+         
           />
         </Grid>
         <Grid item xs={12} md={6} display='none'>
@@ -988,4 +1033,4 @@ function AdvancedSniperDashboard() {
   );
 }
 
-export default AdvancedSniperDashboard;
+export default React.memo(AdvancedSniperDashboard);

@@ -97,6 +97,12 @@ function ControlPanel({
   setMinVolume,
   creationTimeFilter,
   setCreationTimeFilter,
+  useJito,
+  setUseJito,
+  jitoTipLamports,
+  setJitoTipLamports,
+  priorityFee,
+  setPriorityFee,
 }) {
   const handleCollateralChange = (e) => {
     let value = parseFloat(e.target.value);
@@ -228,6 +234,16 @@ function ControlPanel({
           inputProps={{ min: "0", step: "0.1" }}
           fullWidth
         />
+        <StyledTextField
+          label="Priority Fee (Lamports)"
+          type="number"
+          fullWidth
+          margin="normal"
+          variant="outlined"
+          value={priorityFee}
+          onChange={(e) => setPriorityFee(Number(e.target.value))}
+          inputProps={{ min: "0", step: "1000" }}
+        />
       </Box>
 
       <Divider sx={{ my: 2, bgcolor: 'rgba(0, 255, 0, 0.2)' }} />
@@ -293,6 +309,34 @@ function ControlPanel({
           }
           label="Require Telegram Link"
         />
+      </Box>
+
+      <Divider sx={{ my: 2, bgcolor: 'rgba(0, 255, 0, 0.2)' }} />
+
+      <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle1" gutterBottom>
+          Jito Settings
+        </Typography>
+        <FormControlLabel
+          control={
+            <StyledSwitch
+              checked={useJito}
+              onChange={(e) => setUseJito(e.target.checked)}
+              color="primary"
+            />
+          }
+          label="Use Jito Bundles"
+        />
+        {useJito && (
+          <StyledTextField
+            label="Jito Tip (Lamports)"
+            type="number"
+            fullWidth
+            value={jitoTipLamports}
+            onChange={(e) => setJitoTipLamports(Number(e.target.value))}
+            inputProps={{ min: "1000", step: "1000" }}
+          />
+        )}
       </Box>
 
       <Divider sx={{ my: 2, bgcolor: 'rgba(0, 255, 0, 0.2)' }} />
