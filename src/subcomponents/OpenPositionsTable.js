@@ -29,7 +29,7 @@ import { extractTwitterHandle } from '../utils/extractTwitterHandle';
 import PnLCard from './PnLCard';
 import html2canvas from 'html2canvas';
 
-function OpenPositionsTable({ openPositions, sellToken, connection, useJito, jitoTipLamports, solPrice }) {
+function OpenPositionsTable({ openPositions, sellToken, connection, useJito, jitoTipLamports, solPrice, keypair }) {
     const [isPopupOpen, setIsPopupOpen] = useState(false);
     const [selectedToken, setSelectedToken] = useState(null);
     const [creatorSupply, setCreatorSupply] = useState(null);
