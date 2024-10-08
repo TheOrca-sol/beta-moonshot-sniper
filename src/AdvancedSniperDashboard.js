@@ -974,6 +974,8 @@ function AdvancedSniperDashboard() {
                 useJito={useJito}
                 jitoTipLamports={jitoTipLamports}
                 solPrice={solPrice}
+                keypair={keypair}
+
               />
             </Box>
           </LeftColumnContainer>
