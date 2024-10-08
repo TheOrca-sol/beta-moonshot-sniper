@@ -969,7 +969,7 @@ function AdvancedSniperDashboard() {
               
               <OpenPositionsTable 
                 openPositions={openPositions} 
-                sellToken={useCallback(sellToken, [])}
+                sellToken={sellToken}
                 connection={connection}
                 useJito={useJito}
                 jitoTipLamports={jitoTipLamports}
