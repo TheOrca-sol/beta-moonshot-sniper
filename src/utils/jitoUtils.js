@@ -5,7 +5,7 @@ import axios from 'axios';
 export const sendBundle = async (transactions, blockhash, lastValidBlockHeight, tipLamports, feePayer, keypair, connection) => {
   try {
     // Fetch tip accounts
-    const tipAccountsResponse = await axios.get('/api/jito/get-tip-accounts');
+    const tipAccountsResponse = await axios.get('https://theorca.pythonanywhere.com/api/jito/get-tip-accounts');
     const tipAccounts = tipAccountsResponse.data;
     
     if (!tipAccounts || tipAccounts.length === 0) {
@@ -83,7 +83,7 @@ export const sendBundle = async (transactions, blockhash, lastValidBlockHeight, 
 
     console.log('Sending Jito bundle with payload:', JSON.stringify(payload, null, 2));
 
-    const response = await axios.post('/api/jito/send-bundle', payload);
+    const response = await axios.post('https://theorca.pythonanywhere.com/api/jito/send-bundle', payload);
     
     console.log('Jito bundle response:', response.data);
     
