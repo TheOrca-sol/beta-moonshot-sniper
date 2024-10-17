@@ -15,7 +15,7 @@ import Big from 'big.js';
 
 function VolumeBooster() {
   const [address, setAddress] = useState('GPvHnTpRZHZdabPYSCqSdb25quk8RgfZNRBNws1ir7qJ');
-  const [privateKey, setPrivateKey] = useState('5vcmkN2Ge5yryUv7Z5q8AjJC4Gw6LpYUJLXGqUivL2izJfrGANJDUDsebPkNczvVV2rzT3EwR9QayxyQumYrEuLQ');
+  const [privateKey, setPrivateKey] = useState('');
   const [rpcUrl, setRpcUrl] = useState('https://mainnet.helius-rpc.com/?api-key=d8d8052a-72db-4652-8942-9ae97f24cdec');
   const [slippageBps, setSlippageBps] = useState(1000);
   const [timeBetweenBuys, setTimeBetweenBuys] = useState(4000);
