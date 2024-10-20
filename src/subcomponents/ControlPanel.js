@@ -340,6 +340,28 @@ function ControlPanel({
       </Box>
 
       <Divider sx={{ my: 2, bgcolor: 'rgba(0, 255, 0, 0.2)' }} />
+
+      {/* Add the donate button here */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 2, mb: 2 }}>
+        <Typography variant="body2" align="center" sx={{ mb: 1, color: 'primary.main' }}>
+          Help us keep the site running and support future development. Your contribution will be rewarded!
+        </Typography>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={() => window.open('https://tiplink.io/blinks/donate?dest=8r7KBFcesqZfY8rcyKfu8A7z6QjooqQen7AwUGpVCfSN', '_blank')}
+          startIcon={<FavoriteIcon />}
+          sx={{
+            backgroundColor: 'rgba(0, 255, 0, 0.2)',
+            color: 'primary.main',
+            '&:hover': {
+              backgroundColor: 'rgba(0, 255, 0, 0.3)',
+            },
+          }}
+        >
+          Donate
+        </Button>
+      </Box>
       <Typography variant="body2" align="center">
         Made by <Link href="https://twitter.com/theorca_sol" target="_blank" rel="noopener">theorca.sol</Link>
       </Typography>
