@@ -347,7 +347,7 @@ function ControlPanel({
       {/* Add the donate button here */}
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 2, mb: 2 }}>
         <Typography variant="body2" align="center" sx={{ mb: 1, color: 'primary.main' }}>
-          Help us keep the site running and support future development. Your contribution will be rewarded!
+          Help us keep the project running and support future development. Your contribution will be rewarded!
         </Typography>
         <Button
           variant="contained"
