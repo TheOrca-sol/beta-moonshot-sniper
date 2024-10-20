@@ -8,8 +8,11 @@ import {
   FormControlLabel,
   Paper,
   Link,
+  Button,
   styled
 } from '@mui/material';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+
 
 const StyledPanel = styled(Paper)(({ theme }) => ({
   backgroundColor: 'rgba(10, 10, 10, 0.8)',
